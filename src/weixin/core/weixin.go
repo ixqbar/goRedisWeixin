@@ -205,7 +205,7 @@ func (w *Weixin) LoadData() {
 func (w *Weixin) save() {
 	var jsonContent bytes.Buffer
 
-	jsonContent.WriteString("{\"tokens\":{")
+	jsonContent.WriteString(fmt.Sprintf("{\"time\":%d,\"tokens\":{", time.Now().Unix()))
 
 	tokenKeyIsFirst := true
 	for k, v := range w.tokens {
