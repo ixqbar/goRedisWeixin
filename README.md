@@ -18,7 +18,8 @@ ticket zybx 1
 
 
 ### usage
-```
+```php
+<?php
 $redis_handle = new Redis();
 $redis_handle->connect('127.0.0.1', 6788);
 echo $redis_handle->rawCommand("token", "zybx") . PHP_EOL;
