@@ -1,0 +1,39 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"path": "github.com/cpuguy83/go-md2man/v2/md2man",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "xTOvE3PX3qekVlf+gZYah6S4QpE=",
+			"path": "github.com/jonnywang/redcon2",
+			"revision": "4d799dc2aa65a831d31759bc0b6b5ecca7099c5d",
+			"revisionTime": "2019-12-09T10:05:48Z"
+		},
+		{
+			"checksumSHA1": "/azdl+MjedZAOilfYIy4D9Kdg/0=",
+			"path": "github.com/tidwall/redcon",
+			"revision": "47f86dd29af3ea0a451aba50ac0bbb60aae5c356",
+			"revisionTime": "2019-12-19T02:45:32Z"
+		},
+		{
+			"checksumSHA1": "GQjamDz2MrvszMVFp8P1B3nk0cQ=",
+			"path": "github.com/urfave/cli",
+			"revision": "995ba0a8921c7cb7e346f1d87afd6090a23ea3b4",
+			"revisionTime": "2019-12-30T01:08:06Z"
+		},
+		{
+			"path": "github.com/urfave/cli/v2",
+			"revision": "995ba0a8921c7cb7e346f1d87afd6090a23ea3b4"
+		},
+		{
+			"checksumSHA1": "0dPejIu6IM/9qO69y5LU8ojcqIw=",
+			"path": "gopkg.in/ini.v1",
+			"revision": "94291fffe2b14f4632ec0e67c1bfecfc1287a168",
+			"revisionTime": "2019-12-25T02:25:40Z"
+		}
+	],
+	"rootPath": "weixin"
+}
