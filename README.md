@@ -1,7 +1,7 @@
 
 ### version
 ```
-v0.0.1
+v1.1.0
 ```
 
 
@@ -13,6 +13,9 @@ ticket zybx
 强制重刷
 token zybx 1   
 ticket zybx 1
+
+保存
+save
 ```
 * zybx 为对应 ini配置section名称，可与公众号对应
 

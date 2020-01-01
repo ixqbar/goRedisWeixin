@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/karlseguin/jsonwriter"
 	"github.com/tidwall/gjson"
 	"io/ioutil"
 	"sync"
@@ -38,6 +39,13 @@ func init() {
 		tokens:  make(map[string]*WValues, 0),
 		tickets: make(map[string]*WValues, 0),
 	}
+}
+
+func SaveAll()  {
+	wx.Lock()
+	defer wx.Unlock()
+
+	wx.save()
 }
 
 func GetToken(name string, cacheFirst bool) (string, error) {
@@ -99,7 +107,9 @@ func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (s
 		value:    wRes.AccessToken,
 	}
 
-	w.save()
+	if autoLock {
+		w.save()
+	}
 
 	common.Logger.Printf("refresh weixin token success appId=%s,token=%s,expireAt=%s", appId, wRes.AccessToken, w.tokens[appId].expireAt.Format("2006-01-02 15:04:05"))
 
@@ -163,11 +173,18 @@ func (w *Weixin) LoadData() {
 
 	jsonContent, err := ioutil.ReadFile(common.Config.DataFile)
 	if err != nil {
-		common.Logger.Printf("read data file fail %v", err)
+		common.Logger.Print(err)
 		return
 	}
 
-	tokens := gjson.Get(string(jsonContent), "tokens")
+	if !gjson.ValidBytes(jsonContent) {
+		common.Logger.Printf("read error json format data")
+		return
+	}
+
+	jsonResult := gjson.ParseBytes(jsonContent)
+
+	tokens := jsonResult.Get("tokens")
 	tokens.ForEach(func(key, value gjson.Result) bool {
 		expireAt := time.Unix(value.Get("expireAt").Int(), 0)
 		if expireAt.Before(time.Now()) {
@@ -184,7 +201,7 @@ func (w *Weixin) LoadData() {
 		return true
 	})
 
-	tickets := gjson.Get(string(jsonContent), "tickets")
+	tickets := jsonResult.Get("tickets")
 	tickets.ForEach(func(key, value gjson.Result) bool {
 		expireAt := time.Unix(value.Get("expireAt").Int(), 0)
 		if expireAt.Before(time.Now()) {
@@ -203,41 +220,35 @@ func (w *Weixin) LoadData() {
 }
 
 func (w *Weixin) save() {
-	var jsonContent bytes.Buffer
+	buffer := new(bytes.Buffer)
+	jWriter := jsonwriter.New(buffer)
+	jWriter.RootObject(func() {
+		jWriter.KeyValue("time", time.Now().Unix())
+		jWriter.Object("tokens", func() {
+			for k, v := range w.tokens {
+				if v.expireAt.Before(time.Now()) {
+					continue
+				}
+				jWriter.Object(k, func() {
+					jWriter.KeyValue("expireAt", v.expireAt.Unix())
+					jWriter.KeyValue("token", v.value)
+				})
+			}
+		})
+		jWriter.Object("tickets", func() {
+			for k, v := range w.tokens {
+				if v.expireAt.Before(time.Now()) {
+					continue
+				}
+				jWriter.Object(k, func() {
+					jWriter.KeyValue("expireAt", v.expireAt.Unix())
+					jWriter.KeyValue("ticket", v.value)
+				})
+			}
+		})
+	})
 
-	jsonContent.WriteString(fmt.Sprintf("{\"time\":%d,\"tokens\":{", time.Now().Unix()))
+	ioutil.WriteFile(common.Config.DataFile, buffer.Bytes(), 0644)
 
-	tokenKeyIsFirst := true
-	for k, v := range w.tokens {
-		if v.expireAt.Before(time.Now()) {
-			continue
-		}
-		if tokenKeyIsFirst {
-			tokenKeyIsFirst = false
-			jsonContent.WriteString(fmt.Sprintf("\"%s\":{\"expireAt\":%d,\"token\":\"%s\"}", k, v.expireAt.Unix(), v.value))
-		} else {
-			jsonContent.WriteString(fmt.Sprintf(",\"%s\":{\"expireAt\":%d,\"token\":\"%s\"}", k, v.expireAt.Unix(), v.value))
-		}
-	}
-	jsonContent.WriteString("}")
-
-	jsonContent.WriteString(",\"tickets\":{")
-
-	ticketKeyIsFirst := true
-	for k, v := range w.tickets {
-		if v.expireAt.Before(time.Now()) {
-			continue
-		}
-		if ticketKeyIsFirst {
-			ticketKeyIsFirst = false
-			jsonContent.WriteString(fmt.Sprintf("\"%s\":{\"expireAt\":%d,\"ticket\":\"%s\"}", k, v.expireAt.Unix(), v.value))
-		} else {
-			jsonContent.WriteString(fmt.Sprintf(",\"%s\":{\"expireAt\":%d,\"ticket\":\"%s\"}", k, v.expireAt.Unix(), v.value))
-		}
-	}
-	jsonContent.WriteString("}")
-
-	jsonContent.WriteString("}")
-
-	ioutil.WriteFile(common.Config.DataFile, jsonContent.Bytes(), 0644)
+	common.Logger.Print("save data success")
 }

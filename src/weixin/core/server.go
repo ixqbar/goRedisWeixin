@@ -63,6 +63,11 @@ func RunRedisServer(ctx context.Context)  {
 		conn.WriteBulkString(token)
 	})
 
+	rs.Handle("save", func(conn redcon.Conn, cmd redcon.Command) {
+		go SaveAll()
+		conn.WriteString("OK")
+	})
+
 	go func() {
 		common.Logger.Printf("run redis protocol server at %+v with pid=%d", common.Config.Address, PID)
 		err := rs.Run(common.Config.Address)

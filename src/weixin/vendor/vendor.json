@@ -13,6 +13,12 @@
 			"revisionTime": "2019-12-09T10:05:48Z"
 		},
 		{
+			"checksumSHA1": "963xUvzCg4QLcF2zecgnzfx5Z4k=",
+			"path": "github.com/karlseguin/jsonwriter",
+			"revision": "6f05566bac1c6b3cf52d99393003d102ee8a5464",
+			"revisionTime": "2017-05-25T08:51:37Z"
+		},
+		{
 			"checksumSHA1": "/azdl+MjedZAOilfYIy4D9Kdg/0=",
 			"path": "github.com/tidwall/redcon",
 			"revision": "47f86dd29af3ea0a451aba50ac0bbb60aae5c356",
