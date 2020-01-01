@@ -4,6 +4,17 @@
 v1.1.0
 ```
 
+### 配置
+```
+[DEFAULT]
+address=0.0.0.0:6788
+data_file=/data/server/weixin/conf/data.dat
+
+;获取别名
+[zybx]
+app_id=
+app_secret=
+```
 
 ### token ticket 命令
 ```
