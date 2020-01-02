@@ -67,7 +67,7 @@ func GetTicket(name string, cacheFirst bool) (string, error) {
 		return "", errors.New("ERR not found match gzh config")
 	}
 
-	return wx.getTicket(appId, appSecret, cacheFirst)
+	return wx.getTicket(appId, appSecret, cacheFirst, true)
 }
 
 func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (string, error) {
@@ -90,6 +90,7 @@ func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (s
 
 	res, err := Get(tokenApiUrl).Bytes()
 	if err != nil {
+		delete(wx.tickets, appId)
 		common.Logger.Printf("request weixin token api fail api=%s", tokenApiUrl)
 		return "", errors.New("request weixin token api fail")
 	}
@@ -98,6 +99,7 @@ func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (s
 
 	err = json.Unmarshal(res, &wRes)
 	if err != nil || len(wRes.AccessToken) == 0 {
+		delete(wx.tickets, appId)
 		common.Logger.Printf("parse weixin token api response fail api=%s, response=%s", tokenApiUrl, string(res))
 		return "", errors.New("parse weixin token api response fail")
 	}
@@ -116,9 +118,11 @@ func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (s
 	return wRes.AccessToken, nil
 }
 
-func (w *Weixin) getTicket(appId, appSecret string, cacheFirst bool) (string, error) {
-	w.Lock()
-	defer w.Unlock()
+func (w *Weixin) getTicket(appId, appSecret string, cacheFirst, autoLock bool) (string, error) {
+	if autoLock {
+		w.Lock()
+		defer w.Unlock()
+	}
 
 	if cacheFirst {
 		if v, ok := w.tickets[appId]; ok && v.expireAt.After(time.Now()) {
@@ -147,6 +151,14 @@ func (w *Weixin) getTicket(appId, appSecret string, cacheFirst bool) (string, er
 	err = json.Unmarshal(res, &wRes)
 	if err != nil || len(wRes.Ticket) == 0 {
 		common.Logger.Printf("parse weixin ticket api response fail api=%s, response=%s", tokenApiUrl, string(res))
+		if wRes.Errcode == 40001 {
+			if cacheFirst {
+				common.Logger.Printf("will retry getTicket with no cache & lock")
+				return w.getTicket(appId, appSecret, false, false)
+			} else {
+				delete(w.tokens, appId)
+			}
+		}
 		return "", errors.New("parse weixin ticket api response fail")
 	}
 
