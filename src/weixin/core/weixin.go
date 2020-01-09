@@ -248,7 +248,7 @@ func (w *Weixin) save() {
 			}
 		})
 		jWriter.Object("tickets", func() {
-			for k, v := range w.tokens {
+			for k, v := range w.tickets {
 				if v.expireAt.Before(time.Now()) {
 					continue
 				}
