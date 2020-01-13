@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/urfave/cli"
 	"os"
 	"weixin/common"
@@ -32,7 +31,7 @@ func main()  {
 		common.Logger.Printf("run with config file %s", configFile)
 
 		if _, err := common.ParseConfig(configFile); err != nil {
-			return fmt.Errorf("not found config file %v", configFile)
+			return err
 		}
 
 		return core.Run()

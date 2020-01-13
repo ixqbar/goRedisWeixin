@@ -6,7 +6,8 @@ import (
 )
 
 type config struct {
-	Address string `ini:"address"`
+	WebAddress string `ini:"web"`
+	RedisAddress string `ini:"redis"`
 	DataFile string `ini:"data_file"`
 	IniCfg *ini.File
 }
@@ -31,7 +32,7 @@ func ParseConfig(configPath string) (*config, error) {
 		return nil, err
 	}
 
-	if len(Config.Address) == 0 {
+	if len(Config.WebAddress) == 0  || len(Config.RedisAddress) == 0 {
 		return nil, errors.New("error config address")
 	}
 

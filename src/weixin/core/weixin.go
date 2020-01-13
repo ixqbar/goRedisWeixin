@@ -53,7 +53,7 @@ func GetToken(name string, cacheFirst bool) (string, error) {
 	appSecret := common.Config.IniCfg.Section(name).Key("app_secret").String()
 
 	if len(appId) == 0 || len(appSecret) == 0 {
-		return "", errors.New("ERR not found match gzh config")
+		return "", fmt.Errorf("ERR not found match gzh config with %v", name)
 	}
 
 	return wx.getToken(appId, appSecret, cacheFirst, true)
@@ -64,7 +64,7 @@ func GetTicket(name string, cacheFirst bool) (string, error) {
 	appSecret := common.Config.IniCfg.Section(name).Key("app_secret").String()
 
 	if len(appId) == 0 || len(appSecret) == 0 {
-		return "", errors.New("ERR not found match gzh config")
+		return "", fmt.Errorf("ERR not found match gzh config with %v", name)
 	}
 
 	return wx.getTicket(appId, appSecret, cacheFirst, true)
