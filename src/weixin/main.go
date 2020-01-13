@@ -10,7 +10,7 @@ import (
 
 func main()  {
 	app := cli.NewApp()
-	app.Name = "chat"
+	app.Name = "goRedisWeixin"
 	app.Version = common.VERSION
 	app.Description = "weixin token & ticket api server"
 	app.Usage = ""
