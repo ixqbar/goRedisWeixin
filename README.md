@@ -1,7 +1,7 @@
 
 ### version
 ```
-v1.2.0
+v1.3.0
 ```
 
 ### 配置
@@ -19,8 +19,10 @@ data_file=/data/server/weixin/conf/data.dat
 [zybx]
 app_id=
 app_secret=
+is_enterprise=0
 ```
-* v1.2.0版本后配置有变更
+* v1.2.0版本后配置address废弃，增加配置web,redis服务区分
+* v1.3.0版本后增加是否企业微信标记is_enterprise
 
 ### token ticket 命令
 ```

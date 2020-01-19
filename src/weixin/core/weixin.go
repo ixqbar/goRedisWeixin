@@ -19,11 +19,18 @@ type WValues struct {
 }
 
 type WResponse struct {
-	Errcode     int    `json:"errcode"`
-	Errmsg      string `json:"errmsg"`
+	ErrorCode   int    `json:"errcode"`
+	ErrorMsg    string `json:"errmsg"`
 	Ticket      string `json:"ticket"`
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int    `json:"expires_in"`
+}
+
+type WItem struct {
+	AppId         string
+	AppSecret     string
+	IsEnterprise  bool
+	UseCacheFirst bool
 }
 
 type Weixin struct {
@@ -41,7 +48,7 @@ func init() {
 	}
 }
 
-func SaveAll()  {
+func SaveAll() {
 	wx.Lock()
 	defer wx.Unlock()
 
@@ -56,10 +63,27 @@ func GetToken(name string, cacheFirst bool) (string, error) {
 		return "", fmt.Errorf("ERR not found match gzh config with %v", name)
 	}
 
-	return wx.getToken(appId, appSecret, cacheFirst, true)
+	isEnterprise, err := common.Config.IniCfg.Section(name).Key("is_enterprise").Bool()
+
+	if err != nil {
+		return "", err
+	}
+
+	wi := &WItem{AppId: appId, AppSecret: appSecret, IsEnterprise: isEnterprise, UseCacheFirst: cacheFirst}
+
+	return wx.getToken(wi, true)
 }
 
 func GetTicket(name string, cacheFirst bool) (string, error) {
+	isEnterprise, err := common.Config.IniCfg.Section(name).Key("is_enterprise").Bool()
+	if err != nil {
+		return "", err
+	}
+
+	if isEnterprise {
+		return "", nil
+	}
+
 	appId := common.Config.IniCfg.Section(name).Key("app_id").String()
 	appSecret := common.Config.IniCfg.Section(name).Key("app_secret").String()
 
@@ -67,30 +91,40 @@ func GetTicket(name string, cacheFirst bool) (string, error) {
 		return "", fmt.Errorf("ERR not found match gzh config with %v", name)
 	}
 
-	return wx.getTicket(appId, appSecret, cacheFirst, true)
+	wi := &WItem{AppId: appId, AppSecret: appSecret, IsEnterprise: isEnterprise, UseCacheFirst: cacheFirst}
+
+	return wx.getTicket(wi, true)
 }
 
-func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (string, error) {
+func (w *Weixin) getToken(wi *WItem, autoLock bool) (string, error) {
 	if autoLock {
 		w.Lock()
 		defer w.Unlock()
 	}
 
-	if cacheFirst {
-		if v, ok := w.tokens[appId]; ok && v.expireAt.After(time.Now()) {
+	if wi.UseCacheFirst {
+		if v, ok := w.tokens[wi.AppId]; ok && v.expireAt.After(time.Now()) {
 			return v.value, nil
 		}
 	}
 
 	/**
+	非企业版
 	https://developers.weixin.qq.com/doc/offiaccount/Basic_Information/Get_access_token.html
-
+	企业版
+	https://work.weixin.qq.com/api/doc/90000/90135/91039
 	*/
-	tokenApiUrl := fmt.Sprintf("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s", appId, appSecret)
+
+	tokenApiUrl := ""
+	if wi.IsEnterprise {
+		tokenApiUrl = fmt.Sprintf("https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=%s&corpsecret=%s", wi.AppId, wi.AppSecret)
+	} else {
+		tokenApiUrl = fmt.Sprintf("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s", wi.AppId, wi.AppSecret)
+	}
 
 	res, err := Get(tokenApiUrl).Bytes()
 	if err != nil {
-		delete(wx.tickets, appId)
+		delete(wx.tickets, wi.AppId)
 		common.Logger.Printf("request weixin token api fail api=%s", tokenApiUrl)
 		return "", errors.New("request weixin token api fail")
 	}
@@ -99,12 +133,12 @@ func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (s
 
 	err = json.Unmarshal(res, &wRes)
 	if err != nil || len(wRes.AccessToken) == 0 {
-		delete(wx.tickets, appId)
+		delete(wx.tickets, wi.AppId)
 		common.Logger.Printf("parse weixin token api response fail api=%s, response=%s", tokenApiUrl, string(res))
 		return "", errors.New("parse weixin token api response fail")
 	}
 
-	w.tokens[appId] = &WValues{
+	w.tokens[wi.AppId] = &WValues{
 		expireAt: time.Now().Add(time.Second * time.Duration(wRes.ExpiresIn-10)),
 		value:    wRes.AccessToken,
 	}
@@ -113,24 +147,24 @@ func (w *Weixin) getToken(appId, appSecret string, cacheFirst, autoLock bool) (s
 		w.save()
 	}
 
-	common.Logger.Printf("refresh weixin token success appId=%s,token=%s,expireAt=%s", appId, wRes.AccessToken, w.tokens[appId].expireAt.Format("2006-01-02 15:04:05"))
+	common.Logger.Printf("refresh weixin token success appId=%s,token=%s,expireAt=%s", wi.AppId, wRes.AccessToken, w.tokens[wi.AppId].expireAt.Format("2006-01-02 15:04:05"))
 
 	return wRes.AccessToken, nil
 }
 
-func (w *Weixin) getTicket(appId, appSecret string, cacheFirst, autoLock bool) (string, error) {
+func (w *Weixin) getTicket(wi *WItem, autoLock bool) (string, error) {
 	if autoLock {
 		w.Lock()
 		defer w.Unlock()
 	}
 
-	if cacheFirst {
-		if v, ok := w.tickets[appId]; ok && v.expireAt.After(time.Now()) {
+	if wi.UseCacheFirst {
+		if v, ok := w.tickets[wi.AppId]; ok && v.expireAt.After(time.Now()) {
 			return v.value, nil
 		}
 	}
 
-	accessToken, err := w.getToken(appId, appSecret, cacheFirst, false)
+	accessToken, err := w.getToken(wi, false)
 	if err != nil {
 		return "", err
 	}
@@ -151,25 +185,26 @@ func (w *Weixin) getTicket(appId, appSecret string, cacheFirst, autoLock bool) (
 	err = json.Unmarshal(res, &wRes)
 	if err != nil || len(wRes.Ticket) == 0 {
 		common.Logger.Printf("parse weixin ticket api response fail api=%s, response=%s", tokenApiUrl, string(res))
-		if wRes.Errcode == 40001 {
-			if cacheFirst {
+		if wRes.ErrorCode == 40001 {
+			if wi.UseCacheFirst {
+				wi.UseCacheFirst = false
 				common.Logger.Printf("will retry getTicket with no cache & lock")
-				return w.getTicket(appId, appSecret, false, false)
+				return w.getTicket(wi, false)
 			} else {
-				delete(w.tokens, appId)
+				delete(w.tokens, wi.AppId)
 			}
 		}
 		return "", errors.New("parse weixin ticket api response fail")
 	}
 
-	w.tickets[appId] = &WValues{
+	w.tickets[wi.AppId] = &WValues{
 		expireAt: time.Now().Add(time.Second * time.Duration(wRes.ExpiresIn-10)),
 		value:    wRes.Ticket,
 	}
 
 	w.save()
 
-	common.Logger.Printf("refresh weixin ticket success appId=%s,ticket=%s,expireAt=%s", appId, wRes.Ticket, w.tokens[appId].expireAt.Format("2006-01-02 15:04:05"))
+	common.Logger.Printf("refresh weixin ticket success appId=%s,ticket=%s,expireAt=%s", wi.AppId, wRes.Ticket, w.tokens[wi.AppId].expireAt.Format("2006-01-02 15:04:05"))
 
 	return wRes.Ticket, nil
 }
@@ -260,7 +295,10 @@ func (w *Weixin) save() {
 		})
 	})
 
-	ioutil.WriteFile(common.Config.DataFile, buffer.Bytes(), 0644)
-
-	common.Logger.Print("save data success")
+	err := ioutil.WriteFile(common.Config.DataFile, buffer.Bytes(), 0644)
+	if err == nil {
+		common.Logger.Print("save data success")
+	} else {
+		common.Logger.Print(err)
+	}
 }
