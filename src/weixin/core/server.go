@@ -35,6 +35,9 @@ func RunRedisServer(ctx context.Context)  {
 	rs.Handle("version", func (conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteBulkString(common.VERSION)
 	})
+	rs.Handle("command", func (conn redcon.Conn, cmd redcon.Command) {
+		conn.WriteString("OK")
+	})
 	rs.Handle("token", func(conn redcon.Conn, cmd redcon.Command) {
 		if len(cmd.Args) < 2 {
 			conn.WriteError("ERR command args with token")
