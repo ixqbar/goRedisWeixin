@@ -7,7 +7,7 @@ import (
 	"weixin/core"
 )
 
-func main()  {
+func main() {
 	app := cli.NewApp()
 	app.Name = "goRedisWeixin"
 	app.Version = common.VERSION

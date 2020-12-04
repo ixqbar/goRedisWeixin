@@ -55,18 +55,17 @@ func SaveAll() {
 	wx.save()
 }
 
-func GetToken(name string, cacheFirst bool) (string, error) {
+func GetToken(name string, cacheFirst bool) (*WValues, error) {
 	appId := common.Config.IniCfg.Section(name).Key("app_id").String()
 	appSecret := common.Config.IniCfg.Section(name).Key("app_secret").String()
 
 	if len(appId) == 0 || len(appSecret) == 0 {
-		return "", fmt.Errorf("ERR not found match gzh config with %v", name)
+		return nil, fmt.Errorf("ERR not found match gzh config with %v", name)
 	}
 
 	isEnterprise, err := common.Config.IniCfg.Section(name).Key("is_enterprise").Bool()
-
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	wi := &WItem{AppId: appId, AppSecret: appSecret, IsEnterprise: isEnterprise, UseCacheFirst: cacheFirst}
@@ -74,29 +73,30 @@ func GetToken(name string, cacheFirst bool) (string, error) {
 	return wx.getToken(wi, true)
 }
 
-func GetTicket(name string, cacheFirst bool) (string, error) {
+func GetTicket(name string, cacheFirst bool) (*WValues, error) {
 	isEnterprise, err := common.Config.IniCfg.Section(name).Key("is_enterprise").Bool()
 	if err != nil {
-		return "", err
-	}
-
-	if isEnterprise {
-		return "", nil
+		return nil, err
 	}
 
 	appId := common.Config.IniCfg.Section(name).Key("app_id").String()
 	appSecret := common.Config.IniCfg.Section(name).Key("app_secret").String()
 
 	if len(appId) == 0 || len(appSecret) == 0 {
-		return "", fmt.Errorf("ERR not found match gzh config with %v", name)
+		return nil, fmt.Errorf("ERR not found match gzh config with %v", name)
 	}
 
-	wi := &WItem{AppId: appId, AppSecret: appSecret, IsEnterprise: isEnterprise, UseCacheFirst: cacheFirst}
+	wi := &WItem{
+		AppId: appId,
+		AppSecret: appSecret,
+		IsEnterprise: isEnterprise,
+		UseCacheFirst: cacheFirst,
+	}
 
 	return wx.getTicket(wi, true)
 }
 
-func (w *Weixin) getToken(wi *WItem, autoLock bool) (string, error) {
+func (w *Weixin) getToken(wi *WItem, autoLock bool) (*WValues, error) {
 	if autoLock {
 		w.Lock()
 		defer w.Unlock()
@@ -104,7 +104,7 @@ func (w *Weixin) getToken(wi *WItem, autoLock bool) (string, error) {
 
 	if wi.UseCacheFirst {
 		if v, ok := w.tokens[wi.AppId]; ok && v.expireAt.After(time.Now()) {
-			return v.value, nil
+			return v, nil
 		}
 	}
 
@@ -125,8 +125,8 @@ func (w *Weixin) getToken(wi *WItem, autoLock bool) (string, error) {
 	res, err := Get(tokenApiUrl).Bytes()
 	if err != nil {
 		delete(wx.tickets, wi.AppId)
-		common.Logger.Printf("request weixin token api fail api=%s", tokenApiUrl)
-		return "", errors.New("request weixin token api fail")
+		common.Logger.Printf("request weixin token api fail api=%s,%v", tokenApiUrl, err)
+		return nil, errors.New("request weixin token api fail")
 	}
 
 	var wRes WResponse
@@ -135,7 +135,7 @@ func (w *Weixin) getToken(wi *WItem, autoLock bool) (string, error) {
 	if err != nil || len(wRes.AccessToken) == 0 {
 		delete(wx.tickets, wi.AppId)
 		common.Logger.Printf("parse weixin token api response fail api=%s, response=%s", tokenApiUrl, string(res))
-		return "", errors.New("parse weixin token api response fail")
+		return nil, errors.New("parse weixin token api response fail")
 	}
 
 	w.tokens[wi.AppId] = &WValues{
@@ -149,10 +149,10 @@ func (w *Weixin) getToken(wi *WItem, autoLock bool) (string, error) {
 
 	common.Logger.Printf("refresh weixin token success appId=%s,token=%s,expireAt=%s", wi.AppId, wRes.AccessToken, w.tokens[wi.AppId].expireAt.Format("2006-01-02 15:04:05"))
 
-	return wRes.AccessToken, nil
+	return w.tokens[wi.AppId], nil
 }
 
-func (w *Weixin) getTicket(wi *WItem, autoLock bool) (string, error) {
+func (w *Weixin) getTicket(wi *WItem, autoLock bool) (*WValues, error) {
 	if autoLock {
 		w.Lock()
 		defer w.Unlock()
@@ -160,31 +160,38 @@ func (w *Weixin) getTicket(wi *WItem, autoLock bool) (string, error) {
 
 	if wi.UseCacheFirst {
 		if v, ok := w.tickets[wi.AppId]; ok && v.expireAt.After(time.Now()) {
-			return v.value, nil
+			return v, nil
 		}
 	}
 
-	accessToken, err := w.getToken(wi, false)
+	wxValue, err := w.getToken(wi, false)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	/**
 	https://developers.weixin.qq.com/doc/offiaccount/OA_Web_Apps/JS-SDK.html
+	企业版
+	https://qyapi.weixin.qq.com/cgi-bin/get_jsapi_ticket?access_token
 	*/
-	tokenApiUrl := fmt.Sprintf("https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token=%s&type=jsapi", accessToken)
+	ticketApiUrl := ""
+	if wi.IsEnterprise {
+		ticketApiUrl = fmt.Sprintf("https://qyapi.weixin.qq.com/cgi-bin/get_jsapi_ticket?access_token=%s", wxValue.value)
+	} else {
+		ticketApiUrl = fmt.Sprintf("https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token=%s&type=jsapi", wxValue.value)
+	}
 
-	res, err := Get(tokenApiUrl).Bytes()
+	res, err := Get(ticketApiUrl).Bytes()
 	if err != nil {
-		common.Logger.Printf("request weixin ticket api fail api=%s", tokenApiUrl)
-		return "", errors.New("request weixin ticket api fail")
+		common.Logger.Printf("request weixin ticket api fail api=%s,%v", ticketApiUrl, err)
+		return nil, errors.New("request weixin ticket api fail")
 	}
 
 	var wRes WResponse
 
 	err = json.Unmarshal(res, &wRes)
 	if err != nil || len(wRes.Ticket) == 0 {
-		common.Logger.Printf("parse weixin ticket api response fail api=%s, response=%s", tokenApiUrl, string(res))
+		common.Logger.Printf("parse weixin ticket api response fail api=%s, response=%s", ticketApiUrl, string(res))
 		if wRes.ErrorCode == 40001 {
 			if wi.UseCacheFirst {
 				wi.UseCacheFirst = false
@@ -194,7 +201,7 @@ func (w *Weixin) getTicket(wi *WItem, autoLock bool) (string, error) {
 				delete(w.tokens, wi.AppId)
 			}
 		}
-		return "", errors.New("parse weixin ticket api response fail")
+		return nil, errors.New("parse weixin ticket api response fail")
 	}
 
 	w.tickets[wi.AppId] = &WValues{
@@ -206,7 +213,7 @@ func (w *Weixin) getTicket(wi *WItem, autoLock bool) (string, error) {
 
 	common.Logger.Printf("refresh weixin ticket success appId=%s,ticket=%s,expireAt=%s", wi.AppId, wRes.Ticket, w.tokens[wi.AppId].expireAt.Format("2006-01-02 15:04:05"))
 
-	return wRes.Ticket, nil
+	return w.tickets[wi.AppId], nil
 }
 
 func (w *Weixin) LoadData() {

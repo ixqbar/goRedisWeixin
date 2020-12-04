@@ -1,25 +1,26 @@
 package core
 
 import (
-	"context"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/jonnywang/redcon2"
 	"github.com/tidwall/redcon"
 	"net/http"
 	"os"
-	"os/signal"
 	"syscall"
 	"time"
 	"weixin/common"
 )
 
 var PID int
+var runAtTime time.Time
 
-func init()  {
+func init() {
 	PID = syscall.Getpid()
+	runAtTime = time.Now()
 }
 
-func RunInit()  {
+func RunInit() {
 	wx.LoadData()
 }
 
@@ -30,12 +31,15 @@ func ExitServer() {
 	}
 }
 
-func RunRedisServer(ctx context.Context)  {
+func RunRedisServer(ctx *common.ServerContext) {
+	defer ctx.Done()
+	ctx.Add()
+
 	rs := redcon2.NewRedconServeMux()
-	rs.Handle("version", func (conn redcon.Conn, cmd redcon.Command) {
+	rs.Handle("version", func(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteBulkString(common.VERSION)
 	})
-	rs.Handle("command", func (conn redcon.Conn, cmd redcon.Command) {
+	rs.Handle("command", func(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteString("OK")
 	})
 	rs.Handle("token", func(conn redcon.Conn, cmd redcon.Command) {
@@ -49,12 +53,12 @@ func RunRedisServer(ctx context.Context)  {
 			cacheFirst = false
 		}
 
-		token, err := GetToken(string(cmd.Args[1]), cacheFirst)
+		wxValue, err := GetToken(string(cmd.Args[1]), cacheFirst)
 		if err != nil {
 			conn.WriteBulkString("")
 			return
 		}
-		conn.WriteBulkString(token)
+		conn.WriteBulkString(wxValue.value)
 	})
 	rs.Handle("ticket", func(conn redcon.Conn, cmd redcon.Command) {
 		if len(cmd.Args) < 2 {
@@ -67,14 +71,57 @@ func RunRedisServer(ctx context.Context)  {
 			cacheFirst = false
 		}
 
-		token, err := GetTicket(string(cmd.Args[1]), cacheFirst)
+		wxValue, err := GetTicket(string(cmd.Args[1]), cacheFirst)
 		if err != nil {
 			conn.WriteBulkString("")
 			return
 		}
-		conn.WriteBulkString(token)
+		conn.WriteBulkString(wxValue.value)
 	})
+	rs.Handle("ztoken", func(conn redcon.Conn, cmd redcon.Command) {
+		if len(cmd.Args) < 2 {
+			conn.WriteError("ERR command args with token")
+			return
+		}
 
+		cacheFirst := true
+		if len(cmd.Args) >= 3 && string(cmd.Args[2]) == "1" {
+			cacheFirst = false
+		}
+
+		conn.WriteArray(2)
+
+		wxValue, err := GetToken(string(cmd.Args[1]), cacheFirst)
+		if err != nil {
+			conn.WriteBulkString("")
+			conn.WriteBulkString("0")
+			return
+		}
+		conn.WriteBulkString(wxValue.value)
+		conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
+	})
+	rs.Handle("zticket", func(conn redcon.Conn, cmd redcon.Command) {
+		if len(cmd.Args) < 2 {
+			conn.WriteError("ERR command args with token")
+			return
+		}
+
+		cacheFirst := true
+		if len(cmd.Args) >= 3 && string(cmd.Args[2]) == "1" {
+			cacheFirst = false
+		}
+
+		conn.WriteArray(2)
+
+		wxValue, err := GetTicket(string(cmd.Args[1]), cacheFirst)
+		if err != nil {
+			conn.WriteBulkString("")
+			conn.WriteBulkString("0")
+			return
+		}
+		conn.WriteBulkString(wxValue.value)
+		conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
+	})
 	rs.Handle("save", func(conn redcon.Conn, cmd redcon.Command) {
 		go SaveAll()
 		conn.WriteString("OK")
@@ -85,32 +132,39 @@ func RunRedisServer(ctx context.Context)  {
 		err := rs.Run(common.Config.RedisAddress)
 		if err != nil {
 			common.Logger.Print(err)
+			rs = nil
 			ExitServer()
 		}
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-ctx.Quit():
 		common.Logger.Print("redis server catch exit signal")
-		rs.Close()
-		return
+		if rs != nil {
+			rs.Close()
+		}
 	}
 }
 
-func RunWebServer(ctx context.Context)  {
+func RunWebServer(ctx *common.ServerContext) {
+	defer ctx.Done()
+	ctx.Add()
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "version " + common.VERSION)
+		c.String(http.StatusOK, "version "+common.VERSION)
 	})
 	router.GET("/token/:name/*flag", func(c *gin.Context) {
 		name := c.Param("name")
 		flag := c.Param("flag")
+		token := ""
 
-		token, err := GetToken(name, flag != "1")
+		wxValue, err := GetToken(name, flag != "/1")
 		if err != nil {
 			common.Logger.Print(err)
-			token = ""
+		} else {
+			token = wxValue.value
 		}
 
 		c.String(http.StatusOK, token)
@@ -118,16 +172,41 @@ func RunWebServer(ctx context.Context)  {
 	router.GET("/ticket/:name/*flag", func(c *gin.Context) {
 		name := c.Param("name")
 		flag := c.Param("flag")
+		ticket := ""
 
-		ticket, err := GetTicket(name, flag != "1")
+		wxValue, err := GetTicket(name, flag != "/1")
 		if err != nil {
 			common.Logger.Print(err)
-			ticket = ""
+		} else {
+			ticket = wxValue.value
 		}
 
 		c.String(http.StatusOK, ticket)
 	})
+	router.GET("/ztoken/:name/*flag", func(c *gin.Context) {
+		name := c.Param("name")
+		flag := c.Param("flag")
 
+		wxValue, err := GetToken(name, flag != "/1")
+		if err != nil {
+			common.Logger.Print(err)
+			c.JSON(http.StatusOK, gin.H{"value":"","expireAt":0})
+		} else {
+			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
+		}
+	})
+	router.GET("/zticket/:name/*flag", func(c *gin.Context) {
+		name := c.Param("name")
+		flag := c.Param("flag")
+
+		wxValue, err := GetTicket(name, flag != "/1")
+		if err != nil {
+			common.Logger.Print(err)
+			c.JSON(http.StatusOK, gin.H{"value":"","expireAt":0})
+		} else {
+			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
+		}
+	})
 	server := &http.Server{
 		Addr:    common.Config.WebAddress,
 		Handler: router,
@@ -141,30 +220,30 @@ func RunWebServer(ctx context.Context)  {
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-ctx.Quit():
 		common.Logger.Print("redis server catch exit signal")
-		server.Shutdown(ctx)
-		return
+		server.Shutdown(ctx.Context())
 	}
 }
 
 func Run() error {
-	quit := make(chan os.Signal)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := common.NewServerContext()
+
+	ctx.Set("startTime", runAtTime)
 
 	go RunInit()
 	go RunRedisServer(ctx)
 	go RunWebServer(ctx)
 
 	select {
-	case <-quit:
-		common.Logger.Print("Shutdown Server ...")
-		cancel()
+	case <-ctx.Interrupt():
+		common.Logger.Print("server interrupt")
+		ctx.Cancel()
 	}
 
-	<-time.After(5 * time.Second)
-	common.Logger.Print("Server exiting")
+	ctx.Wait()
+	common.Logger.Printf("server uptime %v %v", runAtTime.Format("2006-01-02 15:04:05"), time.Now().Sub(runAtTime))
+	common.Logger.Print("server exit")
 
 	return nil
 }
