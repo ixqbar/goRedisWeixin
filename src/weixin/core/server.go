@@ -80,7 +80,7 @@ func RunRedisServer(ctx *common.ServerContext) {
 	})
 	rs.Handle("ztoken", func(conn redcon.Conn, cmd redcon.Command) {
 		if len(cmd.Args) < 2 {
-			conn.WriteError("ERR command args with token")
+			conn.WriteError("ERR command args with ztoken")
 			return
 		}
 
@@ -92,17 +92,18 @@ func RunRedisServer(ctx *common.ServerContext) {
 		conn.WriteArray(2)
 
 		wxValue, err := GetToken(string(cmd.Args[1]), cacheFirst)
-		if err != nil {
+		if err == nil {
+			conn.WriteBulkString(wxValue.value)
+			conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
+		} else {
+			common.Logger.Print(err)
 			conn.WriteBulkString("")
 			conn.WriteBulkString("0")
-			return
 		}
-		conn.WriteBulkString(wxValue.value)
-		conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
 	})
 	rs.Handle("zticket", func(conn redcon.Conn, cmd redcon.Command) {
 		if len(cmd.Args) < 2 {
-			conn.WriteError("ERR command args with token")
+			conn.WriteError("ERR command args with zticket")
 			return
 		}
 
@@ -114,13 +115,42 @@ func RunRedisServer(ctx *common.ServerContext) {
 		conn.WriteArray(2)
 
 		wxValue, err := GetTicket(string(cmd.Args[1]), cacheFirst)
-		if err != nil {
+		if err == nil {
+			conn.WriteBulkString(wxValue.value)
+			conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
+		} else {
+			common.Logger.Print(err)
 			conn.WriteBulkString("")
 			conn.WriteBulkString("0")
+		}
+	})
+	rs.Handle("zall", func(conn redcon.Conn, cmd redcon.Command) {
+		if len(cmd.Args) < 2 {
+			conn.WriteError("ERR command args with zall")
 			return
 		}
-		conn.WriteBulkString(wxValue.value)
-		conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
+
+		conn.WriteArray(4)
+
+		wxValue, err := GetToken(string(cmd.Args[1]), false)
+		if err == nil {
+			conn.WriteBulkString(wxValue.value)
+			conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
+		} else {
+			common.Logger.Print(err)
+			conn.WriteBulkString("")
+			conn.WriteBulkString("0")
+		}
+
+		wxValue, err = GetTicket(string(cmd.Args[1]), false)
+		if err == nil {
+			conn.WriteBulkString(wxValue.value)
+			conn.WriteBulkString(fmt.Sprintf("%d", wxValue.expireAt.Unix()))
+		} else {
+			common.Logger.Print(err)
+			conn.WriteBulkString("")
+			conn.WriteBulkString("0")
+		}
 	})
 	rs.Handle("save", func(conn redcon.Conn, cmd redcon.Command) {
 		go SaveAll()
@@ -158,41 +188,37 @@ func RunWebServer(ctx *common.ServerContext) {
 	router.GET("/token/:name/*flag", func(c *gin.Context) {
 		name := c.Param("name")
 		flag := c.Param("flag")
-		token := ""
 
 		wxValue, err := GetToken(name, flag != "/1")
-		if err != nil {
-			common.Logger.Print(err)
+		if err == nil {
+			c.String(http.StatusOK, wxValue.value)
 		} else {
-			token = wxValue.value
+			common.Logger.Print(err)
+			c.String(http.StatusOK, "")
 		}
-
-		c.String(http.StatusOK, token)
 	})
 	router.GET("/ticket/:name/*flag", func(c *gin.Context) {
 		name := c.Param("name")
 		flag := c.Param("flag")
-		ticket := ""
 
 		wxValue, err := GetTicket(name, flag != "/1")
-		if err != nil {
-			common.Logger.Print(err)
+		if err == nil {
+			c.String(http.StatusOK, wxValue.value)
 		} else {
-			ticket = wxValue.value
+			common.Logger.Print(err)
+			c.String(http.StatusOK, "")
 		}
-
-		c.String(http.StatusOK, ticket)
 	})
 	router.GET("/ztoken/:name/*flag", func(c *gin.Context) {
 		name := c.Param("name")
 		flag := c.Param("flag")
 
 		wxValue, err := GetToken(name, flag != "/1")
-		if err != nil {
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
+		} else {
 			common.Logger.Print(err)
 			c.JSON(http.StatusOK, gin.H{"value":"","expireAt":0})
-		} else {
-			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
 		}
 	})
 	router.GET("/zticket/:name/*flag", func(c *gin.Context) {
@@ -200,12 +226,37 @@ func RunWebServer(ctx *common.ServerContext) {
 		flag := c.Param("flag")
 
 		wxValue, err := GetTicket(name, flag != "/1")
-		if err != nil {
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
+		} else {
 			common.Logger.Print(err)
 			c.JSON(http.StatusOK, gin.H{"value":"","expireAt":0})
-		} else {
-			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
 		}
+	})
+	router.GET("/zall/:name", func(c *gin.Context) {
+		name := c.Param("name")
+
+		var result = gin.H{
+			"token": gin.H{"value":"","expireAt":0},
+			"ticket": gin.H{"value":"","expireAt":0},
+		}
+
+
+		wxValue, err := GetToken(name, false)
+		if err == nil {
+			result["token"] = gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()}
+		} else {
+			common.Logger.Print(err)
+		}
+
+		wxValue, err = GetTicket(name, false)
+		if err == nil {
+			result["ticket"] = gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()}
+		} else {
+			common.Logger.Print(err)
+		}
+
+		c.JSON(http.StatusOK, result)
 	})
 	server := &http.Server{
 		Addr:    common.Config.WebAddress,
