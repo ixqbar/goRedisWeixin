@@ -1,7 +1,7 @@
 
 ### version
 ```
-v1.3.0
+v1.4.0
 ```
 
 ### 配置
@@ -23,15 +23,21 @@ is_enterprise=0
 ```
 * v1.2.0版本后配置address废弃，增加配置web,redis服务区分
 * v1.3.0版本后增加是否企业微信标记is_enterprise
+* v1.4.0版本后增加zall,ztoken,zticket
 
 ### token ticket 命令
 ```
 token zybx
 ticket zybx
+ztoken zybx
+zticket zybx
+zall zybx
 
 强制重刷
 token zybx 1   
 ticket zybx 1
+ztoken zybx 1
+zticket zybx 1
 
 保存
 save
@@ -42,10 +48,15 @@ save
 
 #### http
 ```
-curl 'http://127.0.0.1:6780/token/boc/'
-curl 'http://127.0.0.1:6780/token/boc/1'
-curl 'http://127.0.0.1:6780/ticket/boc/'
-curl 'http://127.0.0.1:6780/ticket/boc/1'
+curl 'http://127.0.0.1:6780/token/zybx/'
+curl 'http://127.0.0.1:6780/token/zybx/1'
+curl 'http://127.0.0.1:6780/ticket/zybx/'
+curl 'http://127.0.0.1:6780/ticket/zybx/1'
+curl 'http://127.0.0.1:6780/zticket/zybx/'
+curl 'http://127.0.0.1:6780/zticket/zybx/1'
+curl 'http://127.0.0.1:6780/ztoken/zybx/'
+curl 'http://127.0.0.1:6780/ztoken/zybx/1'
+curl 'http://127.0.0.1:6780/zall/zybx'
 ```
 
 #### redis
