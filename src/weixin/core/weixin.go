@@ -143,11 +143,11 @@ func (w *Weixin) getToken(wi *WItem, autoLock bool) (*WValues, error) {
 		value:    wRes.AccessToken,
 	}
 
+	common.Logger.Printf("refresh weixin token success appId=%s,token=%s,expireAt=%s", wi.AppId, wRes.AccessToken, w.tokens[wi.AppId].expireAt.Format("2006-01-02 15:04:05"))
+
 	if autoLock {
 		w.save()
 	}
-
-	common.Logger.Printf("refresh weixin token success appId=%s,token=%s,expireAt=%s", wi.AppId, wRes.AccessToken, w.tokens[wi.AppId].expireAt.Format("2006-01-02 15:04:05"))
 
 	return w.tokens[wi.AppId], nil
 }
@@ -209,9 +209,9 @@ func (w *Weixin) getTicket(wi *WItem, autoLock bool) (*WValues, error) {
 		value:    wRes.Ticket,
 	}
 
-	w.save()
-
 	common.Logger.Printf("refresh weixin ticket success appId=%s,ticket=%s,expireAt=%s", wi.AppId, wRes.Ticket, w.tokens[wi.AppId].expireAt.Format("2006-01-02 15:04:05"))
+
+	w.save()
 
 	return w.tickets[wi.AppId], nil
 }
