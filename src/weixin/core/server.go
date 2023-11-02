@@ -215,10 +215,10 @@ func RunWebServer(ctx *common.ServerContext) {
 
 		wxValue, err := GetToken(name, flag != "/1")
 		if err == nil {
-			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
+			c.JSON(http.StatusOK, gin.H{"value": wxValue.value, "expireAt": wxValue.expireAt.Unix()})
 		} else {
 			common.Logger.Print(err)
-			c.JSON(http.StatusOK, gin.H{"value":"","expireAt":0})
+			c.JSON(http.StatusOK, gin.H{"value": "", "expireAt": 0})
 		}
 	})
 	router.GET("/zticket/:name/*flag", func(c *gin.Context) {
@@ -227,31 +227,30 @@ func RunWebServer(ctx *common.ServerContext) {
 
 		wxValue, err := GetTicket(name, flag != "/1")
 		if err == nil {
-			c.JSON(http.StatusOK, gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()})
+			c.JSON(http.StatusOK, gin.H{"value": wxValue.value, "expireAt": wxValue.expireAt.Unix()})
 		} else {
 			common.Logger.Print(err)
-			c.JSON(http.StatusOK, gin.H{"value":"","expireAt":0})
+			c.JSON(http.StatusOK, gin.H{"value": "", "expireAt": 0})
 		}
 	})
 	router.GET("/zall/:name", func(c *gin.Context) {
 		name := c.Param("name")
 
 		var result = gin.H{
-			"token": gin.H{"value":"","expireAt":0},
-			"ticket": gin.H{"value":"","expireAt":0},
+			"token":  gin.H{"value": "", "expireAt": 0},
+			"ticket": gin.H{"value": "", "expireAt": 0},
 		}
-
 
 		wxValue, err := GetToken(name, false)
 		if err == nil {
-			result["token"] = gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()}
+			result["token"] = gin.H{"value": wxValue.value, "expireAt": wxValue.expireAt.Unix()}
 		} else {
 			common.Logger.Print(err)
 		}
 
 		wxValue, err = GetTicket(name, false)
 		if err == nil {
-			result["ticket"] = gin.H{"value":wxValue.value,"expireAt":wxValue.expireAt.Unix()}
+			result["ticket"] = gin.H{"value": wxValue.value, "expireAt": wxValue.expireAt.Unix()}
 		} else {
 			common.Logger.Print(err)
 		}

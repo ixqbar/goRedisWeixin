@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/karlseguin/jsonwriter"
 	"github.com/tidwall/gjson"
-	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 	"weixin/common"
@@ -87,9 +87,9 @@ func GetTicket(name string, cacheFirst bool) (*WValues, error) {
 	}
 
 	wi := &WItem{
-		AppId: appId,
-		AppSecret: appSecret,
-		IsEnterprise: isEnterprise,
+		AppId:         appId,
+		AppSecret:     appSecret,
+		IsEnterprise:  isEnterprise,
 		UseCacheFirst: cacheFirst,
 	}
 
@@ -125,7 +125,7 @@ func (w *Weixin) getToken(wi *WItem, autoLock bool) (*WValues, error) {
 	res, err := Get(tokenApiUrl).Bytes()
 	if err != nil {
 		delete(wx.tickets, wi.AppId)
-		common.Logger.Printf("request weixin token api fail api=%s,%v", tokenApiUrl, err)
+		common.Logger.Printf("request weixin token api fail appId=%s,api=%s,%v", wi.AppId, tokenApiUrl, err)
 		return nil, errors.New("request weixin token api fail")
 	}
 
@@ -134,7 +134,7 @@ func (w *Weixin) getToken(wi *WItem, autoLock bool) (*WValues, error) {
 	err = json.Unmarshal(res, &wRes)
 	if err != nil || len(wRes.AccessToken) == 0 {
 		delete(wx.tickets, wi.AppId)
-		common.Logger.Printf("parse weixin token api response fail api=%s, response=%s", tokenApiUrl, string(res))
+		common.Logger.Printf("parse weixin token api response fail appId=%s,api=%s,response=%s", wi.AppId, tokenApiUrl, string(res))
 		return nil, errors.New("parse weixin token api response fail")
 	}
 
@@ -183,7 +183,7 @@ func (w *Weixin) getTicket(wi *WItem, autoLock bool) (*WValues, error) {
 
 	res, err := Get(ticketApiUrl).Bytes()
 	if err != nil {
-		common.Logger.Printf("request weixin ticket api fail api=%s,%v", ticketApiUrl, err)
+		common.Logger.Printf("request weixin ticket api fail appId=%s,api=%s,%v", wi.AppId, ticketApiUrl, err)
 		return nil, errors.New("request weixin ticket api fail")
 	}
 
@@ -191,7 +191,7 @@ func (w *Weixin) getTicket(wi *WItem, autoLock bool) (*WValues, error) {
 
 	err = json.Unmarshal(res, &wRes)
 	if err != nil || len(wRes.Ticket) == 0 {
-		common.Logger.Printf("parse weixin ticket api response fail api=%s, response=%s", ticketApiUrl, string(res))
+		common.Logger.Printf("parse weixin ticket api response fail appId=%s,api=%s,response=%s", wi.AppId, ticketApiUrl, string(res))
 		if wRes.ErrorCode == 40001 {
 			if wi.UseCacheFirst {
 				wi.UseCacheFirst = false
@@ -225,7 +225,7 @@ func (w *Weixin) LoadData() {
 		return
 	}
 
-	jsonContent, err := ioutil.ReadFile(common.Config.DataFile)
+	jsonContent, err := os.ReadFile(common.Config.DataFile)
 	if err != nil {
 		common.Logger.Print(err)
 		return
@@ -302,7 +302,7 @@ func (w *Weixin) save() {
 		})
 	})
 
-	err := ioutil.WriteFile(common.Config.DataFile, buffer.Bytes(), 0644)
+	err := os.WriteFile(common.Config.DataFile, buffer.Bytes(), 0644)
 	if err == nil {
 		common.Logger.Print("save data success")
 	} else {
