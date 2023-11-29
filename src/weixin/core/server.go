@@ -124,6 +124,7 @@ func RunRedisServer(ctx *common.ServerContext) {
 			conn.WriteBulkString("0")
 		}
 	})
+	//增加过期时间戳一起返回
 	rs.Handle("zall", func(conn redcon.Conn, cmd redcon.Command) {
 		if len(cmd.Args) < 2 {
 			conn.WriteError("ERR command args with zall")
